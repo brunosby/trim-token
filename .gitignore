@@ -1,0 +1,12 @@
+__pycache__/
+.trimtoken/
+node_modules/
+.venv/
+
+# environment files and local output
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+.trimtoken.json

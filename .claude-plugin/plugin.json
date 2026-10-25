@@ -1,0 +1,10 @@
+{
+  "name": "trim-token",
+  "version": "1.1.0",
+  "description": "Saves tokens in Claude Code without losing quality: blocks uncapped scans, cleans and caps tool output, turns re-reads into diffs, shows a symbol map of large files and warns when the session got expensive.",
+  "author": { "name": "brunosby", "url": "https://github.com/brunosby" },
+  "homepage": "https://github.com/brunosby/trim-token",
+  "repository": "https://github.com/brunosby/trim-token",
+  "license": "MIT",
+  "keywords": ["tokens", "context", "hooks", "savings"]
+}

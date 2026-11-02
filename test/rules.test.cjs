@@ -95,13 +95,13 @@ test('/trim-token:savings is answered by the hook (no model turn), with cache us
   assert.strictEqual(runHook('expand', { cwd: root, session_id: 's', command_name: 'trim-token:savings' }).raw, '');
 });
 
-test('cold cache with a large context suggests a handoff and /clear', () => {
+test('cold cache with a large context suggests /compact and /clear', () => {
   const root = tmpRoot();
   const t = path.join(root, 't.jsonl');
   const old = new Date(Date.now() - 2 * 3600000).toISOString();
   fs.writeFileSync(t, `${JSON.stringify({ type: 'assistant', timestamp: old, message: { usage: { input_tokens: 10, cache_read_input_tokens: 90000, cache_creation_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 5 } } } })}\n`);
   const r = runHook('prompt', { cwd: root, session_id: 's', transcript_path: t });
-  assert.match(r.out.systemMessage, /handoff brief/);
+  assert.match(r.out.systemMessage, /compact <what to keep>/);
 });
 
 test('audit: hooks of two sources on the same tool are reported', () => {

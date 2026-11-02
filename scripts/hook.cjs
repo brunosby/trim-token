@@ -26,14 +26,14 @@ function readStdin(timeoutMs = 3000) {
 function sessionStart(p, cfg) {
   const root = p.cwd;
   if (['compact', 'clear'].includes(p.source)) S.resetSession(root, p.session_id);
-  if (p.source === 'resume') return null;
+  if (p.source === 'resume') return resumed(p, cfg);
   const parts = [];
   if (CFG.on(cfg, 'contract')) parts.push(require('../lib/texts.cjs').CONTRACT);
   // After /compact the cut outputs left the context, but their full text is still on disk.
   if (p.source === 'compact' && CFG.on(cfg, 'outputs')) {
     const recent = S.recentOutputs(root, p.session_id, 5);
     if (recent.length) {
-      parts.push('Full outputs saved earlier in this session (Grep them instead of re-running the command):\n' +
+      parts.push('Full outputs saved earlier in this session; a Grep on them finds what the cut left out without running the commands again:\n' +
         recent.map((r) => `- ${r.file} (${r.chars} chars${r.src ? `, from: ${r.src}` : ''})`).join('\n'));
     }
   }
@@ -41,7 +41,26 @@ function sessionStart(p, cfg) {
   return { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: parts.join('\n\n') } };
 }
 
+/** Resume: a warning to the human when the context will be reprocessed at full price; nothing for the model. */
+function resumed(p, cfg) {
+  if (!CFG.on(cfg, 'resume')) return null;
+  const R = require('../lib/resume.cjs');
+  const msg = R.warning(p, cfg);
+  if (!msg) return null;
+  // The prompt's cold-cache warning would say the same thing again.
+  try {
+    const u = p.transcript_path && require('../lib/watch.cjs').lastUsage(p.transcript_path);
+    if (u && u.at) require('../lib/watch.cjs').markCold(p.cwd, p.session_id, u.at);
+  } catch { /* the warning may repeat */ }
+  if (CFG.on(cfg, 'resumeHold')) R.arm(p.cwd, p.session_id);
+  return { systemMessage: msg };
+}
+
 function prompt(p, cfg) {
+  if (CFG.on(cfg, 'resumeHold') && require('../lib/resume.cjs').takeHold(p.cwd, p.session_id, p.prompt)) {
+    return { decision: 'block', reason: 'trim-token: this prompt was held so you can choose first (resumeHold is on). ' +
+      'Send it again to go on, or run /compact <what to keep> or /clear before it.' };
+  }
   // The warning reads the last ping time, so the worker is cancelled after it.
   const msg = CFG.on(cfg, 'watch') ? require('../lib/watch.cjs').check({ root: p.cwd, sessionId: p.session_id, transcriptPath: p.transcript_path, cfg, prompt: p.prompt }) : null;
   require('../lib/warm.cjs').cancel(p.cwd, p.session_id);
@@ -113,7 +132,7 @@ function postBash(resp, cfg, root, meta = {}) {
   if (grouped && !saved) {
     const original = resp.stdout + (resp.stderr ? `\n[stderr]\n${resp.stderr}` : '');
     const file = S.saveFull(root, 'bash', original, meta);
-    out.stdout += `\n[trimtoken] Similar log lines were grouped. Full text: ${file} — Grep that file if you need one of them.`;
+    out.stdout += `\n[trimtoken] Similar log lines were grouped. Full text: ${file}, where a Grep finds any one of them.`;
   }
   if (!changed) return null;
   const after = out.stdout.length + (typeof out.stderr === 'string' ? out.stderr.length : 0);

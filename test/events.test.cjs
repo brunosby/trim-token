@@ -16,14 +16,50 @@ test('session-start injeta o contrato curto, exceto em resume', () => {
   const root = tmpRoot();
   const r = runHook('session-start', { cwd: root, session_id: 's', source: 'startup' });
   const ctx = r.out.hookSpecificOutput.additionalContext;
-  assert.match(ctx, /Locate before reading/);
+  assert.match(ctx, /located before it is read/);
   assert.ok(ctx.length < 1000, String(ctx.length));
   assert.strictEqual(runHook('session-start', { cwd: root, session_id: 's', source: 'resume' }).raw, '');
 });
 
+test('resume: an expired cache over a large context warns the human with the estimate; nothing goes to the model', () => {
+  const root = tmpRoot();
+  const p = { cwd: root, session_id: 'rs', source: 'resume', prompt_cache_likely_expired: true, context_tokens: 150000, estimated_cache_write_usd: 0.94 };
+  const r = runHook('session-start', p);
+  assert.match(r.out.systemMessage, /~150k tokens/);
+  assert.match(r.out.systemMessage, /US\$ 0\.94/);
+  assert.strictEqual(r.out.hookSpecificOutput, undefined);
+  assert.strictEqual(runHook('session-start', { ...p, prompt_cache_likely_expired: false }).raw, '');
+  assert.strictEqual(runHook('session-start', { ...p, context_tokens: 5000 }).raw, '');
+  // Holding the first prompt is off by default.
+  assert.strictEqual(runHook('prompt', { cwd: root, session_id: 'rs', prompt: 'continue' }).raw, '');
+});
+
+test('resume: with resumeHold on, the first prompt is held once; a command is never held', () => {
+  const root = tmpRoot();
+  fs.writeFileSync(path.join(root, '.trimtoken.json'), JSON.stringify({ on: ['resumeHold'] }));
+  const p = { cwd: root, session_id: 'rh', source: 'resume', prompt_cache_likely_expired: true, context_tokens: 150000 };
+  runHook('session-start', p);
+  const held = runHook('prompt', { cwd: root, session_id: 'rh', prompt: 'continue' });
+  assert.strictEqual(held.out.decision, 'block');
+  assert.strictEqual(runHook('prompt', { cwd: root, session_id: 'rh', prompt: 'continue' }).raw, '');
+  runHook('session-start', p);
+  assert.strictEqual(runHook('prompt', { cwd: root, session_id: 'rh', prompt: '/compact keep the plan' }).raw, '');
+});
+
+test('prompt: no cold-cache warning when the conversation was compacted after the last response', () => {
+  const root = tmpRoot();
+  const t = path.join(root, 't.jsonl');
+  const at = new Date(Date.now() - 2 * 3600000).toISOString();
+  fs.writeFileSync(t, [
+    JSON.stringify({ type: 'assistant', timestamp: at, message: { usage: { input_tokens: 5, cache_read_input_tokens: 130000, cache_creation_input_tokens: 500, cache_creation: { ephemeral_1h_input_tokens: 500 } } } }),
+    JSON.stringify({ type: 'system', subtype: 'compact_boundary', timestamp: at }),
+  ].join('\n') + '\n');
+  assert.strictEqual(runHook('prompt', { cwd: root, session_id: 'cb', transcript_path: t, prompt: 'hi' }).raw, '');
+});
+
 test('subagent injeta o contrato de resposta-dado', () => {
   const r = runHook('subagent', { cwd: tmpRoot(), session_id: 's', agent_type: 'Explore', agent_id: 'a' });
-  assert.match(r.out.hookSpecificOutput.additionalContext, /Return data/);
+  assert.match(r.out.hookSpecificOutput.additionalContext, /What helps it most is data/);
   assert.ok(r.out.hookSpecificOutput.additionalContext.length < 400);
 });
 

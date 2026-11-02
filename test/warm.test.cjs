@@ -93,7 +93,7 @@ test('topic change: a prompt that shares almost no words with the recent ones, o
   const chk = (prompt, t = big) => W2.check({ root, sessionId: 'tp', transcriptPath: t, cfg, prompt });
   assert.strictEqual(chk('Corrija o cálculo do desconto progressivo no carrinho de compras do checkout'), null);
   assert.strictEqual(chk('O desconto progressivo do carrinho ainda falha quando o cupom de frete é aplicado no checkout'), null);
-  assert.match(chk('Configure o pipeline de deploy da documentação no GitHub Pages com domínio próprio') || '', /new topic[\s\S]*handoff[\s\S]*\/clear/);
+  assert.match(chk('Configure o pipeline de deploy da documentação no GitHub Pages com domínio próprio') || '', /new topic[\s\S]*\/clear/);
   // the new topic is now the reference: a follow-up on it does not warn again
   assert.strictEqual(chk('No deploy da documentação, o domínio próprio precisa de HTTPS no GitHub Pages'), null);
   // a small context never warns

@@ -4,7 +4,8 @@
  * Read-only audit for /trim-token:audit. Every enabled MCP server, plugin and skill costs
  * context in each session (its tool and skill descriptions), used or not. This crosses what is
  * enabled with what the transcripts of the last N days actually used, and lists events where
- * hooks from different sources run on the same tools. It changes nothing.
+ * hooks from different sources run on the same tools. It changes nothing. Token and cache numbers
+ * are left to Claude Code (claude plugin details, /context, /usage), which measures them.
  *
  *   node audit.cjs [project-dir] [days]
  */
@@ -166,7 +167,10 @@ function report(root = process.cwd(), days = 30, home = os.homedir()) {
   const conflicts = hookConflicts(home, root, plugs);
   lines.push('', 'Hooks from different sources on the same tools (their order is not defined; one may undo the other):');
   lines.push(...(conflicts.length ? conflicts.map((c) => `  ${c}`) : ['  none']));
-  lines.push('', '/context shows what each of these costs in tokens. To disable one: /plugin, /mcp, or move the skill folder out.');
+  // Claude Code already measures these; the audit points to its numbers instead of estimating them.
+  lines.push('', 'Fixed tokens of a plugin: claude plugin details <name> in a terminal (no model call). Everything loaded: /context.',
+    'Prompt cache: the "Prompt cache (main)" line of /usage shows the hit rate and the likely cause of the last miss.',
+    'To disable one: /plugin, /mcp, or move the skill folder out.');
   return lines.join('\n');
 }
 

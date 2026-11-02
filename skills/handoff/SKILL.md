@@ -1,6 +1,7 @@
 ---
 name: handoff
-description: Write the brief that carries work into a fresh context — a subagent prompt, /compact instructions, or the first prompt after /clear. Use when delegating to a subagent, before /compact or /clear, or when the user will continue the work in a new session. Not for a summary the user reads in this same context.
+description: Use when work moves to a context that starts empty - another session tomorrow, a subagent, or the first prompt after /clear - to write the brief it needs (goal, known facts with path:line, scope, expected answer, when to stop). For staying in the same session, Claude Code covers it with /compact <focus> or /rewind. Not for a summary the user reads here.
+when_to_use: The user will continue later or elsewhere, or work is delegated. Phrases like "vou continuar amanhã", "continuo em outra sessão", "antes do /clear", "prepare um resumo para passar adiante", "passe isso para um subagente", "I will pick this up tomorrow", "write a handoff", "before I clear", "brief a subagent".
 ---
 
 # Handing work to a fresh context
@@ -21,7 +22,7 @@ STOP WHEN the condition that ends the work
 - Pass locations, not content: `src/p.py:88` costs one line; pasting the function costs it twice.
 - For logs, pass the command and the failing lines, not the run.
 
-Before `/compact`, give the same skeleton as the focus:
+Staying in this session needs no brief: Claude Code keeps the work with `/compact <focus>`, or with `/rewind` (summarize from a chosen point, which keeps the prompt cache). Before `/compact`, the same skeleton works as the focus:
 `/compact Keep: goal, decisions taken, files changed and why, open items, next step. Drop: dead ends and full tool outputs.`
 
 After `/clear`, the brief is the first prompt. Decisions that must outlive sessions go into the

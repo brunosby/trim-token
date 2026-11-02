@@ -13,24 +13,28 @@ does nothing on a Claude subscription, which uses the 1-hour cache.
 
 | Component | When | What it does |
 |---|---|---|
-| `contract` | session start and after `/compact` | context discipline (locate before reading, extract with a script, bound output) and an output contract, in 5 lines |
+| `contract` | session start and after `/compact` | context discipline (locate before reading, extract with a script, bound output) and an output contract, in 5 lines. Like every text this plugin adds for the model, it is written as how the project works, not as an order: injected orders can be taken for prompt injection |
 | `outputs` | after `/compact` | lists the full outputs this session saved in `.trimtoken/out/`, with the command that produced each, so they are searched instead of re-run |
 | `shell` | after Bash | strips ANSI codes, progress redraws, repeated lines and blank runs; log lines that differ only in a time, id, hash or duration become first line, `[×N more like: …]`, last line, and the original output is saved in `.trimtoken/out/` with its path at the end. Error lines and data rows are never grouped |
 | `cap` | after Bash, Grep, MCP | above 16k characters (Bash) or 25k (others), cuts while keeping the start, the end, error lines and then `path:line` and test verdicts; the full text goes to `.trimtoken/out/`. Output that was already cut or moved to a file is left alone |
 | `reread` | after Read | a full re-read of a file that changed since the last full read shows only the changed lines (Claude Code itself already answers an identical re-read with "file unchanged") |
 | `json` | after MCP | indented JSON is minified (lossless) |
 | `subagent` | subagent start | the subagent answers with data, not narrative |
-| `watch` | every prompt | warns you (not the model) about a heavy context and a cold prompt cache; with the cache cold and the context over 30% of the window, it suggests a handoff brief and `/clear`; it suggests the same when a prompt shares almost no words with the last ones (a new topic) and the context holds 40k tokens or more |
+| `watch` | every prompt | warns you (not the model) about a heavy context and a cold prompt cache, and when a prompt shares almost no words with the last ones (a new topic) while the context holds 40k tokens or more. The suggestions are Claude Code's own commands: `/clear`, `/compact <what to keep>`, `/rewind` (summarize from a chosen point, keeps the cache). When the conversation was compacted after the last response (by `/compact`, or by Claude Code itself when a conversation sits idle shortly before a 1-hour cache expires), it stays quiet: the last usage no longer describes the context |
+| `resume` | resuming a session | when Claude Code (2.1.251+) reports that the prompt cache has likely expired and the context holds 30k tokens or more, warns you before the first prompt with the size and Claude Code's own cost estimate (`estimated_cache_write_usd`, at API prices), and suggests `/compact <what to keep>` or `/clear`. Nothing goes to the model |
+| `resumeHold` | first prompt after such a resume | **off by default** (`"on": ["resumeHold"]`). Holds that first prompt once so you can choose `/compact` or `/clear` first; sending it again goes through, and a command is never held |
 | `warm` | when a turn ends | with the 5-minute prompt cache and a context of 50k tokens or more, sends up to 3 one-word turns on a fork of the session (never saved, hooks off), 4.5 minutes apart, so the cache is still warm when you come back. The next prompt or the end of the session stops it. Does nothing with the 1-hour cache, which Claude Code uses by default on a Claude subscription; it matters with an API key, Bedrock or Vertex. Each ping is a real request: it uses your plan or API budget. It finds the Claude Code that runs the session (no PATH setup); `TRIMTOKEN_CLAUDE` sets the path by hand |
 | `direct` | `/trim-token:savings`, `/trim-token:audit` | answered by the hook itself, with no model turn (0 tokens) |
 
 Also included: the `handoff` skill and two commands:
 
+The `handoff` skill is for a brief that goes to a context that starts empty (another session, a subagent, the first prompt after `/clear`). Staying in the same session needs no skill: `/compact <focus>` or `/rewind`.
+
 - `/trim-token:savings`: what each mechanism saved, and this session's tokens by kind (cache read, cache write, uncached input, output), read from its transcript,
   and the billed cost in input-token equivalents with the share of each kind and the cost per model call.
   Typed only: Claude does not see it in its skill list.
 - `/trim-token:audit`: MCP servers, plugins and skills enabled but unused in the last 30 days, and
-  hooks from different sources on the same tools. Read-only. Typed only.
+  hooks from different sources on the same tools. Read-only. Typed only. For token and cache numbers it points to what Claude Code measures: `claude plugin details <name>` for a plugin's fixed tokens, and the "Prompt cache (main)" line of `/usage` for the hit rate and the likely cause of the last miss.
 
 ### Left to Claude Code
 
@@ -39,6 +43,16 @@ Earlier versions also blocked unfiltered listings (`scan`), blocked a command th
 skill and `bin/sym.cjs`. They were removed: Claude Code already caps Glob results and moves Bash output
 over 30,000 characters to a file, answers an identical re-read itself, and has the Explore agent; in
 the tests the guards never fired and the agents and skill were never picked.
+
+Also left out on purpose:
+
+- Hiding old tool outputs (observation masking) would cut up to half the cost in long sessions, but a hook can only replace the output of the current call, not earlier ones. Claude Code's compaction is what does that today.
+- The cut keeps the start, the end and the error lines, and saves the original. It does not try harder to make the cut part recoverable: in published measurements, recoverable cut content was rarely used and did not improve results.
+
+### Checking the handoff skill
+
+- Free: `/context` or `claude --debug` in a normal session shows whether `handoff` is listed with its description or only its name (when the skill list goes over its budget, the least used skills lose their description first). `claude plugin details trim-token` shows the fixed tokens before and after a description change.
+- Uses the plan's limit: `evals/` has 8 cases (4 that should load `handoff`, 4 that should not), graded only with `tool_used`, which calls no judge. Run a few after a limit reset: `claude plugin eval . --ablation none --runs 1 --case "fires-*"`. `--max-cost-usd` caps the estimated price, not the subscription's usage.
 
 ## Install
 
@@ -60,10 +74,13 @@ clone: `claude --plugin-dir <path-to-clone>`.
 ```json
 {
   "off": ["warm"],
+  "on": ["resumeHold"],
   "limits": { "shellCap": 16000, "cap": 25000, "contextWindow": 200000, "coldHandoffPct": 30, "topicMinTokens": 40000, "warmPings": 3, "warmMinTokens": 50000 },
   "noise": ["generated"]
 }
 ```
+
+`off` turns components off and `on` turns them back on; `resumeHold` is the only one that starts off.
 
 State lives in `<project>/.trimtoken/`, which the plugin adds to `.git/info/exclude`.
 
@@ -72,6 +89,8 @@ State lives in `<project>/.trimtoken/`, which the plugin adds to `.git/info/excl
 ```bash
 node --test test/*.test.cjs
 ```
+
+The tests for the resume warning, `resumeHold` and the compaction check were written for 1.6.0 but not run yet.
 
 Scripts and raw data of an earlier A/B test are in [`ab-test/`](ab-test/); its numbers were measured on an older version.
 

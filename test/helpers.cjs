@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.join(__dirname, '..', 'bin', 'hook.cjs');
+const HOOK = path.join(__dirname, '..', 'scripts', 'hook.cjs');
 
 function tmpRoot(prefix = 'enx-') {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

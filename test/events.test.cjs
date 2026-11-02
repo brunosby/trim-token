@@ -3,44 +3,13 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { runHook, tmpRoot, filesIn } = require('./helpers.cjs');
-const SC = require('../lib/scan.cjs');
-const CFG = require('../lib/config.cjs');
+const { runHook, tmpRoot } = require('./helpers.cjs');
 
-const noise = CFG.DEFAULTS.noise;
-const deny = (cmd) => SC.checkShell(cmd, noise);
-
-test('scan: denies tree listings with no filter or cap', () => {
-  for (const c of ['find .', 'find . -type f', 'ls -R', 'ls -laR src', 'tree', 'cd x && find .']) {
-    assert.ok(deny(c), c);
-  }
-});
-
-test('scan: allows content searches and filtered, capped or redirected forms', () => {
-  for (const c of ["find . -name '*.py'", 'find . | head -50', 'find . -maxdepth 2', 'tree -L 2', 'grep -rl TODO .',
-    "grep -rn TODO --include='*.py' .", 'rg -l TODO', 'rg TODO src', 'grep -rn TODO . | head -20', 'grep -rn TODO . > /tmp/x.txt',
-    'git diff | grep foo', 'ls -la', 'grep -n x file.py', "rg -g '*.ts' TODO", 'grep -rc TODO .',
-    'grep -rn TODO .', 'rg TODO']) { // content search stays free: in the A/B test, blocking it only cost turns
-    assert.strictEqual(deny(c), null, c);
-  }
-});
-
-test('scan: a recusa traz um comando pronto', () => {
-  assert.match(deny('find .'), /find \. -name '\*\.py' .* \| head -50/);
-});
-
-test('hook pre: only acts on a large directory', () => {
-  const small = tmpRoot();
-  filesIn(small, 10);
-  const p = (root) => ({ cwd: root, session_id: 's', tool_name: 'Bash', tool_input: { command: 'find .' } });
-  assert.strictEqual(runHook('pre', p(small)).raw, '');
-  const big = tmpRoot();
-  filesIn(big, 320);
-  const r = runHook('pre', p(big));
-  assert.strictEqual(r.out.hookSpecificOutput.permissionDecision, 'deny');
-  const g = runHook('pre', { cwd: big, session_id: 's', tool_name: 'Glob', tool_input: { pattern: '**/*' } });
-  assert.strictEqual(g.out.hookSpecificOutput.permissionDecision, 'deny');
-  assert.strictEqual(runHook('pre', { cwd: big, session_id: 's', tool_name: 'Glob', tool_input: { pattern: '**/*.py' } }).raw, '');
+test('there is no PreToolUse hook: listings and repeated commands are left to Claude Code', () => {
+  const hooks = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8')).hooks;
+  assert.strictEqual(hooks.PreToolUse, undefined);
+  assert.strictEqual(hooks.PostToolUseFailure, undefined);
+  assert.strictEqual(runHook('pre', { cwd: tmpRoot(), session_id: 's', tool_name: 'Bash', tool_input: { command: 'find .' } }).raw, '');
 });
 
 test('session-start injeta o contrato curto, exceto em resume', () => {
@@ -53,7 +22,7 @@ test('session-start injeta o contrato curto, exceto em resume', () => {
 });
 
 test('subagent injeta o contrato de resposta-dado', () => {
-  const r = runHook('subagent', { cwd: tmpRoot(), session_id: 's', agent_type: 'scout', agent_id: 'a' });
+  const r = runHook('subagent', { cwd: tmpRoot(), session_id: 's', agent_type: 'Explore', agent_id: 'a' });
   assert.match(r.out.hookSpecificOutput.additionalContext, /Return data/);
   assert.ok(r.out.hookSpecificOutput.additionalContext.length < 400);
 });

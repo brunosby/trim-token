@@ -73,3 +73,18 @@ test('TRIMTOKEN=off e componente desligado', () => {
   fs.writeFileSync(`${root}/.trimtoken.json`, JSON.stringify({ off: ['shell', 'cap'] }));
   assert.strictEqual(runHook('post', payload).raw, '');
 });
+
+test('hook post Bash: when similar log lines are grouped, the original is saved and the output says where', () => {
+  const root = tmpRoot();
+  const lines = Array.from({ length: 60 }, (_, i) => `12:00:${String(i).padStart(2, '0')} INFO request ${1000 + i} served in ${i + 3}ms`);
+  const stdout = lines.join('\n') + '\nDone';
+  const r = runHook('post', { cwd: root, session_id: 's', tool_name: 'Bash', tool_input: { command: 'tail -60 app.log' }, tool_response: { stdout, stderr: '' } });
+  const o = r.out.hookSpecificOutput.updatedToolOutput;
+  assert.match(o.stdout, /\[×58 more like: /);
+  const file = /Similar log lines were grouped\. Full text: (\S+)/.exec(o.stdout)[1];
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), stdout);
+  // repeats of the same line lose nothing, so nothing is saved
+  const same = Array.from({ length: 300 }, () => 'npm WARN deprecated x@1').join('\n') + '\nadded 3 packages';
+  const r2 = runHook('post', { cwd: tmpRoot(), session_id: 's', tool_name: 'Bash', tool_input: { command: 'npm i' }, tool_response: { stdout: same, stderr: '' } });
+  assert.doesNotMatch(r2.out.hookSpecificOutput.updatedToolOutput.stdout, /Full text/);
+});

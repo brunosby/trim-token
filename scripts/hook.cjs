@@ -26,23 +26,36 @@ function readStdin(timeoutMs = 3000) {
 function sessionStart(p, cfg) {
   const root = p.cwd;
   if (['compact', 'clear'].includes(p.source)) S.resetSession(root, p.session_id);
-  if (p.source === 'resume' || !CFG.on(cfg, 'contract')) return null;
-  const { CONTRACT } = require('../lib/texts.cjs');
-  return { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: CONTRACT } };
+  if (p.source === 'resume') return null;
+  const parts = [];
+  if (CFG.on(cfg, 'contract')) parts.push(require('../lib/texts.cjs').CONTRACT);
+  // After /compact the cut outputs left the context, but their full text is still on disk.
+  if (p.source === 'compact' && CFG.on(cfg, 'outputs')) {
+    const recent = S.recentOutputs(root, p.session_id, 5);
+    if (recent.length) {
+      parts.push('Full outputs saved earlier in this session (Grep them instead of re-running the command):\n' +
+        recent.map((r) => `- ${r.file} (${r.chars} chars${r.src ? `, from: ${r.src}` : ''})`).join('\n'));
+    }
+  }
+  if (!parts.length) return null;
+  return { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: parts.join('\n\n') } };
 }
 
 function prompt(p, cfg) {
-  if (!CFG.on(cfg, 'watch')) return null;
-  const msg = require('../lib/watch.cjs').check({ root: p.cwd, sessionId: p.session_id, transcriptPath: p.transcript_path, cfg });
+  // The warning reads the last ping time, so the worker is cancelled after it.
+  const msg = CFG.on(cfg, 'watch') ? require('../lib/watch.cjs').check({ root: p.cwd, sessionId: p.session_id, transcriptPath: p.transcript_path, cfg, prompt: p.prompt }) : null;
+  require('../lib/warm.cjs').cancel(p.cwd, p.session_id);
   return msg ? { systemMessage: msg } : null;
 }
 
-function pre(p, cfg) {
-  if (!CFG.on(cfg, 'scan')) return null;
-  const reason = require('../lib/scan.cjs').check({ tool: p.tool_name, input: p.tool_input, root: p.cwd, cfg });
-  if (!reason) return null;
-  S.stat(p.cwd, p.session_id, 'scan', 0, 0);
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } };
+/** UserPromptExpansion: plugin commands answered by code, without a model turn. */
+function expand(p, cfg) {
+  const name = String(p.command_name || '');
+  let text = null;
+  if (name === 'trim-token:savings') text = require('./stats.cjs').report(p.cwd, p.session_id);
+  else if (name === 'trim-token:audit') text = require('./audit.cjs').report(p.cwd);
+  if (text == null || !CFG.on(cfg, 'direct')) return null;
+  return { decision: 'block', reason: text.length > 9500 ? `${text.slice(0, 9500)}\n…` : text };
 }
 
 function subagent(p, cfg) {
@@ -53,34 +66,40 @@ function subagent(p, cfg) {
 
 /* ---------------------------- post-execution ---------------------------- */
 
-function capText(text, limit, cfg, root, kind) {
+function capText(text, limit, cfg, root, kind, meta) {
   if (text.length <= limit) return null;
-  const { cut, footer } = require('../lib/cap.cjs');
-  const file = S.saveFull(root, kind, text);
+  const { cut, footer, alreadyCut } = require('../lib/cap.cjs');
+  if (alreadyCut(text)) return null;
+  const file = S.saveFull(root, kind, text, meta);
   const c = cut(text, Math.min(cfg.limits.keep, limit - 1));
   return c.text + footer(text.length, file, c.signals > 0);
 }
 
-function postBash(resp, cfg, root) {
+function postBash(resp, cfg, root, meta = {}) {
   if (!resp || typeof resp !== 'object' || typeof resp.stdout !== 'string') return null;
   const SH = require('../lib/shell.cjs');
   const before = resp.stdout.length + (typeof resp.stderr === 'string' ? resp.stderr.length : 0);
   const out = { ...resp };
   let changed = false;
+  let grouped = false; // grouping drops the middle lines of a run, so the original is kept on disk
   if (CFG.on(cfg, 'shell')) {
     for (const k of ['stdout', 'stderr']) {
       if (typeof out[k] !== 'string') continue;
       const c = SH.compact(out[k], { minChars: cfg.limits.shellMinChars });
-      if (c != null) { out[k] = c; changed = true; }
+      if (c != null) {
+        if (SH.GROUP_LINE.test(c) && !SH.GROUP_LINE.test(out[k])) grouped = true;
+        out[k] = c; changed = true;
+      }
     }
   }
+  let saved = false;
   if (CFG.on(cfg, 'cap')) {
     const total = out.stdout.length + (typeof out.stderr === 'string' ? out.stderr.length : 0);
-    if (total > cfg.limits.shellCap) {
+    const { cut, footer, alreadyCut } = require('../lib/cap.cjs');
+    if (total > cfg.limits.shellCap && !alreadyCut(out.stdout)) {
       // The saved full text is the original (before cleanup), with stderr at the end.
       const original = resp.stdout + (resp.stderr ? `\n[stderr]\n${resp.stderr}` : '');
-      const file = S.saveFull(root, 'bash', original);
-      const { cut, footer } = require('../lib/cap.cjs');
+      const file = S.saveFull(root, 'bash', original, meta);
       const budget = Math.min(cfg.limits.keep, cfg.limits.shellCap - 1);
       const errShare = typeof out.stderr === 'string' && out.stderr.length ? Math.min(out.stderr.length, Math.floor(budget * 0.35)) : 0;
       const so = cut(out.stdout, budget - errShare);
@@ -88,21 +107,27 @@ function postBash(resp, cfg, root) {
       out.stdout = so.text + footer(original.length, file, so.signals > 0 || Boolean(se && se.signals));
       if (se) out.stderr = se.text;
       changed = true;
+      saved = true;
     }
+  }
+  if (grouped && !saved) {
+    const original = resp.stdout + (resp.stderr ? `\n[stderr]\n${resp.stderr}` : '');
+    const file = S.saveFull(root, 'bash', original, meta);
+    out.stdout += `\n[trimtoken] Similar log lines were grouped. Full text: ${file} — Grep that file if you need one of them.`;
   }
   if (!changed) return null;
   const after = out.stdout.length + (typeof out.stderr === 'string' ? out.stderr.length : 0);
   return { result: out, mechanism: 'bash', before, after };
 }
 
-function postGrep(resp, cfg, root) {
+function postGrep(resp, cfg, root, meta) {
   if (!CFG.on(cfg, 'cap')) return null;
   if (resp && typeof resp === 'object' && typeof resp.content === 'string') {
-    const t = capText(resp.content, cfg.limits.cap, cfg, root, 'grep');
+    const t = capText(resp.content, cfg.limits.cap, cfg, root, 'grep', meta);
     return t == null ? null : { result: { ...resp, content: t }, mechanism: 'grep', before: resp.content.length, after: t.length };
   }
   if (typeof resp === 'string') {
-    const t = capText(resp, cfg.limits.cap, cfg, root, 'grep');
+    const t = capText(resp, cfg.limits.cap, cfg, root, 'grep', meta);
     return t == null ? null : { result: t, mechanism: 'grep', before: resp.length, after: t.length };
   }
   return null;
@@ -122,7 +147,7 @@ function textLength(resp) {
   return n;
 }
 
-function postMcp(resp, cfg, root) {
+function postMcp(resp, cfg, root, meta) {
   const before = textLength(resp);
   if (!before) return null;
   let out = resp;
@@ -133,7 +158,7 @@ function postMcp(resp, cfg, root) {
     });
   }
   if (CFG.on(cfg, 'cap')) {
-    out = mapMcp(out, (t) => capText(t, cfg.limits.cap, cfg, root, 'mcp') ?? t);
+    out = mapMcp(out, (t) => capText(t, cfg.limits.cap, cfg, root, 'mcp', meta) ?? t);
   }
   const after = textLength(out);
   return after < before ? { result: out, mechanism: 'mcp', before, after } : null;
@@ -143,20 +168,39 @@ function post(p, cfg) {
   const tool = String(p.tool_name || '');
   const resp = p.tool_response;
   const root = p.cwd;
+  const ti = p.tool_input || {};
+  const meta = { session: p.session_id, source: tool === 'Bash' ? ti.command : tool === 'Grep' ? `Grep ${ti.pattern || ''}` : tool };
   let r = null;
   if (tool === 'Read') {
     r = require('../lib/reread.cjs').onRead({
       input: p.tool_input, result: resp, root, sessionId: p.session_id, agentId: p.agent_id, cfg, on: (id) => CFG.on(cfg, id),
     });
-  } else if (tool === 'Bash') r = postBash(resp, cfg, root);
-  else if (tool === 'Grep') r = postGrep(resp, cfg, root);
-  else if (tool.startsWith('mcp__')) r = postMcp(resp, cfg, root);
+  } else if (tool === 'Bash') {
+    r = postBash(resp, cfg, root, meta);
+  } else if (tool === 'Grep') r = postGrep(resp, cfg, root, meta);
+  else if (tool.startsWith('mcp__')) r = postMcp(resp, cfg, root, meta);
   if (!r) return null;
   S.stat(root, p.session_id, r.mechanism, r.before, r.after);
   return { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: r.result } };
 }
 
-const HANDLERS = { 'session-start': sessionStart, prompt, pre, post, subagent };
+function stop(p, cfg) {
+  if (!CFG.on(cfg, 'warm') || p.stop_hook_active) return null;
+  try {
+    const plan = require('../lib/warm.cjs').schedule({
+      root: p.cwd, sessionId: p.session_id, transcriptPath: p.transcript_path, cfg, lastUsage: require('../lib/watch.cjs').lastUsage,
+    });
+    if (plan) S.stat(p.cwd, p.session_id, 'warm', 0, 0);
+  } catch { /* no worker: the next prompt just pays the cold cache */ }
+  return null;
+}
+
+function sessionEnd(p) {
+  require('../lib/warm.cjs').cancel(p.cwd, p.session_id);
+  return null;
+}
+
+const HANDLERS = { 'session-start': sessionStart, prompt, post, subagent, expand, stop, 'session-end': sessionEnd };
 
 async function main() {
   process.stdout.on('error', () => {});

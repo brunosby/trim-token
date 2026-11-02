@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write the brief that carries work into a fresh context — a subagent prompt, /compact instructions, or the first prompt after /clear. Use when delegating to scout, runner or any subagent, or before compacting or clearing.
+description: Write the brief that carries work into a fresh context — a subagent prompt, /compact instructions, or the first prompt after /clear. Use when delegating to a subagent, before /compact or /clear, or when the user will continue the work in a new session. Not for a summary the user reads in this same context.
 ---
 
 # Handing work to a fresh context

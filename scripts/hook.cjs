@@ -132,7 +132,7 @@ function postBash(resp, cfg, root, meta = {}) {
   if (grouped && !saved) {
     const original = resp.stdout + (resp.stderr ? `\n[stderr]\n${resp.stderr}` : '');
     const file = S.saveFull(root, 'bash', original, meta);
-    out.stdout += `\n[trimtoken] Similar log lines were grouped. Full text: ${file}, where a Grep finds any one of them.`;
+    out.stdout += `\n[trimtoken] Similar log lines were grouped. Full text: ${file} — a Grep there finds any one of them.`;
   }
   if (!changed) return null;
   const after = out.stdout.length + (typeof out.stderr === 'string' ? out.stderr.length : 0);

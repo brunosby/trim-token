@@ -76,7 +76,9 @@ clone: `claude --plugin-dir <path-to-clone>`.
 {
   "off": ["warm"],
   "on": ["resumeHold"],
-  "limits": { "shellCap": 16000, "cap": 25000, "contextWindow": 200000, "coldHandoffPct": 30, "topicMinTokens": 40000, "warmPings": 3, "warmMinTokens": 50000 },
+  "limits": { "shellCap": 16000, "cap": 25000, "keep": 8000, "shellMinChars": 1500, "rereadMinChars": 2000, "jsonMinChars": 2000,
+              "watchFirst": 120000, "watchStep": 60000, "coldMinTokens": 30000, "contextWindow": 200000, "coldHandoffPct": 30,
+              "topicMinTokens": 40000, "warmPings": 3, "warmMinTokens": 50000, "warmEveryMs": 270000 },
   "noise": ["generated"],
   "noiseGuard": "block"
 }
@@ -95,7 +97,7 @@ State lives in `<project>/.trimtoken/`, which the plugin adds to `.git/info/excl
 node --test test/*.test.cjs
 ```
 
-The tests for the resume warning, `resumeHold` and the compaction check were written for 1.6.0 but not run yet.
+All 60 tests pass on 1.7.0 (run on 2026-11-03), including the resume warning, `resumeHold`, the compaction check and `noiseGuard`.
 
 Scripts and raw data of an earlier A/B test are in [`ab-test/`](ab-test/); its numbers were measured on an older version.
 

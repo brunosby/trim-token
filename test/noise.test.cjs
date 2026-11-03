@@ -225,3 +225,13 @@ test('hook: an error inside the check lets the call through', () => {
   assert.strictEqual(r.status, 0);
   assert.strictEqual(runHook('pre', { cwd: path.join(root, 'missing'), session_id: 's', tool_name: 'Grep', tool_input: {} }).raw, '');
 });
+
+test('in a git repository, the corrected grep -r and find also leave out .git; it never causes a denial by itself', () => {
+  const root = project({ '.git/HEAD': 'ref' });
+  assert.match(bash(root, 'grep -rn foo .').fix, /^grep --exclude-dir=node_modules --exclude-dir=\.git -rn foo \.$/);
+  assert.match(bash(root, 'find . -name "*.js"').fix, /'\(' -name node_modules -o -name \.git '\)' -prune/);
+  assert.match(bash(root, 'grep -rn foo . --exclude-dir=.git').fix, /^grep --exclude-dir=node_modules -rn/);
+  assert.doesNotMatch(bash(root, 'tree').fix, /\.git/);
+  fs.rmSync(path.join(root, 'node_modules'), { recursive: true });
+  assert.strictEqual(bash(root, 'grep -rn foo .'), null);
+});

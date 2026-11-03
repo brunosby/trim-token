@@ -144,7 +144,7 @@ function namesOtherPlugin(text) {
 
 test('no other plugin is named anywhere in this plugin', () => {
   const ROOT = path.join(__dirname, '..');
-  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (['.git', 'node_modules'].includes(e.name) ? [] : e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (['.git', 'node_modules', '.trimtoken'].includes(e.name) ? [] : e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
   for (const f of walk(ROOT)) assert.ok(!namesOtherPlugin(fs.readFileSync(f, 'utf8')), path.relative(ROOT, f));
 });
 

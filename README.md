@@ -53,7 +53,6 @@ Also left out on purpose:
 ### Checking the handoff skill
 
 - Free: `/context` or `claude --debug` in a normal session shows whether `handoff` is listed with its description or only its name (when the skill list goes over its budget, the least used skills lose their description first). `claude plugin details trim-token` shows the fixed tokens before and after a description change.
-- Uses the plan's limit: `evals/` has 8 cases (4 that should load `handoff`, 4 that should not), graded only with `tool_used`, which calls no judge. Run a few after a limit reset: `claude plugin eval . --ablation none --runs 1 --case "fires-*"`. `--max-cost-usd` caps the estimated price, not the subscription's usage.
 
 ## Install
 
@@ -97,9 +96,7 @@ State lives in `<project>/.trimtoken/`, which the plugin adds to `.git/info/excl
 node --test test/*.test.cjs
 ```
 
-All 62 tests pass on 1.7.2 (run on 2026-11-03), including the resume warning, `resumeHold`, the compaction check and `noiseGuard`.
-
-Scripts and raw data of an earlier A/B test are in [`ab-test/`](ab-test/); its numbers were measured on an older version.
+All 63 tests pass on 1.7.2 (run on 2026-11-03), including the resume warning, `resumeHold`, the compaction check and `noiseGuard`.
 
 ## Tips worth more than any plugin
 

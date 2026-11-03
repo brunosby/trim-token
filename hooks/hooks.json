@@ -1,5 +1,5 @@
 {
-  "description": "trim-token: output cleanup and cap, re-reads as diffs, short contracts, cost warnings, keep-warm pings and zero-turn commands.",
+  "description": "trim-token: output cleanup and cap, searches kept out of dependency folders, re-reads as diffs, short contracts, cost warnings, keep-warm pings and zero-turn commands.",
   "hooks": {
     "SessionStart": [
       {
@@ -31,6 +31,18 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.cjs\" expand",
             "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Glob|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.cjs\" pre",
+            "timeout": 10
           }
         ]
       }

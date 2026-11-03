@@ -17,6 +17,7 @@ does nothing on a Claude subscription, which uses the 1-hour cache.
 | `outputs` | after `/compact` | lists the full outputs this session saved in `.trimtoken/out/`, with the command that produced each, so they are searched instead of re-run |
 | `shell` | after Bash | strips ANSI codes, progress redraws, repeated lines and blank runs; log lines that differ only in a time, id, hash or duration become first line, `[×N more like: …]`, last line, and the original output is saved in `.trimtoken/out/` with its path at the end. Error lines and data rows are never grouped |
 | `cap` | after Bash, Grep, MCP | above 16k characters (Bash) or 25k (others), cuts while keeping the start, the end, error lines and then `path:line` and test verdicts; the full text goes to `.trimtoken/out/`. Output that was already cut or moved to a file is left alone |
+| `noiseGuard` | before Grep, Glob, Bash, PowerShell | a search or listing that walks into a dependency or build folder from the `noise` list is denied, and the denial carries the same command without that folder (`--exclude-dir=node_modules`, `-prune`, `-g '!node_modules'`, `tree -I`, `| Where-Object FullName -notmatch`, `| findstr /v`). Covered: `find`, `grep -r`, `rg` (when `.gitignore` does not already leave the folder out, or with `--no-ignore`/`-u`), `ls -R`, `tree`, `dir /s`, `Get-ChildItem -Recurse`, a Grep or Glob whose path or pattern is inside the folder, and a Grep over a folder whose `.gitignore` does not list it. Passes: reading one file there, a command that already names the folder (an exclusion or `| grep -v`), and any call once your prompt names the folder or the package. `node_modules`, `.venv`, `venv` and `site-packages` count wherever they are; the other names (`dist`, `build`, `bin`…) only where `.gitignore` lists them. `"noiseGuard": "warn"` only adds a note; `false` turns it off |
 | `reread` | after Read | a full re-read of a file that changed since the last full read shows only the changed lines (Claude Code itself already answers an identical re-read with "file unchanged") |
 | `json` | after MCP | indented JSON is minified (lossless) |
 | `subagent` | subagent start | the subagent answers with data, not narrative |
@@ -38,7 +39,7 @@ The `handoff` skill is for a brief that goes to a context that starts empty (ano
 
 ### Left to Claude Code
 
-Earlier versions also blocked unfiltered listings (`scan`), blocked a command that failed twice in a row
+Earlier versions also blocked every unfiltered listing (`scan`; `noiseGuard` covers only dependency and build folders), blocked a command that failed twice in a row
 (`retry`), answered identical re-reads, and shipped the `scout` and `runner` agents, the `lean-reading`
 skill and `bin/sym.cjs`. They were removed: Claude Code already caps Glob results and moves Bash output
 over 30,000 characters to a file, answers an identical re-read itself, and has the Explore agent; in
@@ -76,9 +77,13 @@ clone: `claude --plugin-dir <path-to-clone>`.
   "off": ["warm"],
   "on": ["resumeHold"],
   "limits": { "shellCap": 16000, "cap": 25000, "contextWindow": 200000, "coldHandoffPct": 30, "topicMinTokens": 40000, "warmPings": 3, "warmMinTokens": 50000 },
-  "noise": ["generated"]
+  "noise": ["generated"],
+  "noiseGuard": "block"
 }
 ```
+
+`noise` adds folder names to the list `noiseGuard` uses; a name added there counts wherever it is. `noiseGuard` is `"block"` (default), `"warn"` or `false`.
+`noiseGuard` reads the command line only: a script or tool that walks the folder by itself passes, and so does a command it cannot parse. An error in the check lets the call through.
 
 `off` turns components off and `on` turns them back on; `resumeHold` is the only one that starts off.
 

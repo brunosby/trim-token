@@ -127,7 +127,7 @@ test('contract: injected texts fit Claude Code limits and every hook names a kno
   for (const t of [T.CONTRACT, T.SUBAGENT]) assert.ok(t.length < 10000);
   const { HANDLERS } = require('../scripts/hook.cjs');
   const hooks = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8')).hooks;
-  const known = ['SessionStart', 'UserPromptSubmit', 'UserPromptExpansion', 'PostToolUse', 'SubagentStart', 'Stop', 'SessionEnd'];
+  const known = ['SessionStart', 'UserPromptSubmit', 'UserPromptExpansion', 'PreToolUse', 'PostToolUse', 'SubagentStart', 'Stop', 'SessionEnd'];
   for (const [event, groups] of Object.entries(hooks)) {
     assert.ok(known.includes(event), event);
     for (const g of groups) for (const h of g.hooks) assert.ok(HANDLERS[h.command.split(' ').pop()], h.command);

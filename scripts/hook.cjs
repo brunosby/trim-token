@@ -57,6 +57,10 @@ function resumed(p, cfg) {
 }
 
 function prompt(p, cfg) {
+  // noiseGuard lets a search into a dependency folder through when this prompt names it.
+  if (require('../lib/noise.cjs').mode(cfg) !== 'off') {
+    try { require('../lib/noise.cjs').savePrompt(p.cwd, p.session_id, p.prompt); } catch { /* the guard just sees no prompt */ }
+  }
   if (CFG.on(cfg, 'resumeHold') && require('../lib/resume.cjs').takeHold(p.cwd, p.session_id, p.prompt)) {
     return { decision: 'block', reason: 'trim-token: this prompt was held so you can choose first (resumeHold is on). ' +
       'Send it again to go on, or run /compact <what to keep> or /clear before it.' };
@@ -81,6 +85,23 @@ function subagent(p, cfg) {
   if (!CFG.on(cfg, 'subagent')) return null;
   const { SUBAGENT } = require('../lib/texts.cjs');
   return { hookSpecificOutput: { hookEventName: 'SubagentStart', additionalContext: SUBAGENT } };
+}
+
+/* ---------------------------- pre-execution ---------------------------- */
+
+/** noiseGuard: a search or listing that walks into a dependency or build folder. */
+function pre(p, cfg) {
+  const G = require('../lib/noise.cjs');
+  const m = G.mode(cfg);
+  if (m === 'off') return null;
+  let hit;
+  try {
+    hit = G.check({ tool: String(p.tool_name || ''), input: p.tool_input, root: p.cwd, cfg, prompt: G.lastPrompt(p.cwd, p.session_id) });
+  } catch { return null; } // a token saver, not a security check: any doubt lets the call through
+  if (!hit) return null;
+  const text = G.message(hit);
+  if (m === 'warn') return { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: text } };
+  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: text } };
 }
 
 /* ---------------------------- post-execution ---------------------------- */
@@ -219,7 +240,7 @@ function sessionEnd(p) {
   return null;
 }
 
-const HANDLERS = { 'session-start': sessionStart, prompt, post, subagent, expand, stop, 'session-end': sessionEnd };
+const HANDLERS = { 'session-start': sessionStart, prompt, pre, post, subagent, expand, stop, 'session-end': sessionEnd };
 
 async function main() {
   process.stdout.on('error', () => {});

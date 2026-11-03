@@ -5,9 +5,10 @@ const fs = require('fs');
 const path = require('path');
 const { runHook, tmpRoot } = require('./helpers.cjs');
 
-test('there is no PreToolUse hook: listings and repeated commands are left to Claude Code', () => {
+test('the only PreToolUse hook is noiseGuard: listings outside noise folders and repeated commands are left to Claude Code', () => {
   const hooks = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8')).hooks;
-  assert.strictEqual(hooks.PreToolUse, undefined);
+  assert.strictEqual(hooks.PreToolUse.length, 1);
+  assert.strictEqual(hooks.PreToolUse[0].matcher, 'Grep|Glob|Bash|PowerShell');
   assert.strictEqual(hooks.PostToolUseFailure, undefined);
   assert.strictEqual(runHook('pre', { cwd: tmpRoot(), session_id: 's', tool_name: 'Bash', tool_input: { command: 'find .' } }).raw, '');
 });

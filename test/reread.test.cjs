@@ -43,3 +43,24 @@ test('a subagent has its own window; compacting resets the window', () => {
   runHook('session-start', { cwd: root, session_id: 'sess', source: 'compact' });
   assert.strictEqual(runHook('post', readPayload(root, file, t)).raw, '');
 });
+
+test('a diff needs the earlier full read on the current branch of the transcript: after /rewind or /compact the full file comes back', () => {
+  const root = tmpRoot();
+  const file = path.join(root, 'b.txt');
+  const tx = path.join(root, 't.jsonl');
+  const base = Array.from({ length: 300 }, (_, i) => `line ${i} with sample text for the test`);
+  const v2 = [...base]; v2[10] = 'line 10 CHANGED';
+  const v3 = [...v2]; v3[20] = 'line 20 CHANGED';
+  const entry = (uuid, parent, id) => JSON.stringify({ type: 'assistant', uuid, parentUuid: parent, message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Read', input: { file_path: file } }] } });
+  fs.writeFileSync(tx, [entry('a1', null, 'T1'), entry('a2', 'a1', 'T2')].join('\n') + '\n');
+  runHook('post', readPayload(root, file, base.join('\n'), {}, { transcript_path: tx, tool_use_id: 'T1' }));
+  // Same branch: the first read is still there.
+  assert.match(out(runHook('post', readPayload(root, file, v2.join('\n'), {}, { transcript_path: tx, tool_use_id: 'T2' }))), /changed since your last full read/);
+  // /rewind to before the reads: a new branch that does not hold T2.
+  fs.appendFileSync(tx, entry('b1', null, 'T3') + '\n');
+  assert.strictEqual(runHook('post', readPayload(root, file, v3.join('\n'), {}, { transcript_path: tx, tool_use_id: 'T3' })).raw, '');
+  // On the new branch, the read made there is the base for the next diff.
+  fs.appendFileSync(tx, entry('b2', 'b1', 'T4') + '\n');
+  const v4 = [...v3]; v4[30] = 'line 30 CHANGED';
+  assert.match(out(runHook('post', readPayload(root, file, v4.join('\n'), {}, { transcript_path: tx, tool_use_id: 'T4' }))), /line 30 CHANGED/);
+});

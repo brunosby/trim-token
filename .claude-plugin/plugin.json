@@ -1,6 +1,6 @@
 {
   "name": "trim-token",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Saves tokens in Claude Code without losing quality: cleans and caps tool output, turns re-reads of changed files into diffs, keeps a short working contract and warns when the session got expensive.",
   "author": {
     "name": "brunosby",

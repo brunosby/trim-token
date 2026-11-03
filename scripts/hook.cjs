@@ -214,6 +214,7 @@ function post(p, cfg) {
   if (tool === 'Read') {
     r = require('../lib/reread.cjs').onRead({
       input: p.tool_input, result: resp, root, sessionId: p.session_id, agentId: p.agent_id, cfg, on: (id) => CFG.on(cfg, id),
+      transcriptPath: p.agent_id ? null : p.transcript_path, toolUseId: p.tool_use_id,
     });
   } else if (tool === 'Bash') {
     r = postBash(resp, cfg, root, meta);

@@ -10,7 +10,7 @@
       "name": "trim-token",
       "source": "./",
       "description": "Saves tokens in Claude Code without losing quality.",
-      "version": "1.7.1"
+      "version": "1.7.2"
     }
   ]
 }

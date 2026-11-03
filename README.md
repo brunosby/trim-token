@@ -103,8 +103,8 @@ Scripts and raw data of an earlier A/B test are in [`ab-test/`](ab-test/); its n
 
 ## Tips worth more than any plugin
 
-From the [Claude Code cost documentation](https://code.claude.com/docs/en/costs): `/clear` when you
-switch tasks, Sonnet as the default (Opus only when the task needs it), a lower `/effort` on simple
+Run `/clear` when you
+switch tasks, keep Sonnet as the default (Opus only when the task needs it), use a lower `/effort` on simple
 tasks, and avoid pauses longer than the cache TTL in a large session. trim-token warns you when the
 context gets heavy or the cache goes cold, and keeps a large session's 5-minute cache warm through a
 short pause (`"off": ["warm"]` turns that off). With it installed, don't repeat the context discipline in

@@ -112,7 +112,7 @@ function capText(text, limit, cfg, root, kind, meta) {
   if (alreadyCut(text)) return null;
   const file = S.saveFull(root, kind, text, meta);
   const c = cut(text, Math.min(cfg.limits.keep, limit - 1));
-  return c.text + footer(text.length, file, c.signals > 0);
+  return c.text + footer(text.length, file, c.signals > 0, c.dropped);
 }
 
 function postBash(resp, cfg, root, meta = {}) {
@@ -147,7 +147,7 @@ function postBash(resp, cfg, root, meta = {}) {
       const errShare = typeof out.stderr === 'string' && out.stderr.length ? Math.min(out.stderr.length, Math.floor(budget * 0.35)) : 0;
       const so = cut(out.stdout, budget - errShare);
       const se = errShare ? cut(out.stderr, errShare) : null;
-      out.stdout = so.text + footer(original.length, file, so.signals > 0 || Boolean(se && se.signals));
+      out.stdout = so.text + footer(original.length, file, so.signals > 0 || Boolean(se && se.signals), so.dropped + ((se && se.dropped) || 0));
       if (se) out.stderr = se.text;
       changed = true;
       saved = true;
@@ -239,8 +239,10 @@ function stop(p, cfg) {
   return null;
 }
 
+// The session is over: what it read and its prompt words are no longer needed on disk.
 function sessionEnd(p) {
   require('../lib/warm.cjs').cancel(p.cwd, p.session_id);
+  if (p.session_id) S.resetSession(p.cwd, p.session_id);
   return null;
 }
 

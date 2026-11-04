@@ -36,6 +36,32 @@ function table(rows, title) {
   return out;
 }
 
+const ESTIMATE_NOTE = '  Estimated: characters kept out of the context ÷ 4, counted once. The real saving is larger when the output\n' +
+  '  would have been re-read from the cache on later turns, and smaller when it would have dropped out at /compact.\n';
+
+// Keep-warm pings are real requests: what they used, from their own usage records (measured, not estimated).
+function warmTable(root, session, now = Date.now()) {
+  const rows = readLines(path.join(root, '.trimtoken', 'warm.jsonl'));
+  if (!rows || !rows.length) return '';
+  const d = new Date(now);
+  const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const sum = (xs) => {
+    const s = { n: xs.length, failed: xs.filter((x) => !x.ok).length, read: 0, write: 0, output: 0, units: 0 };
+    for (const x of xs) {
+      s.read += x.read || 0; s.write += x.write || 0; s.output += x.output || 0;
+      s.units += readWeight(x.model) * (x.read || 0) + 1.25 * (x.write || 0) + 5 * (x.output || 0);
+    }
+    return s;
+  };
+  const line = (label, s) => `  ${label.padEnd(34)} ${String(s.n).padStart(5)}×  cache read ${fmt(s.read)}, cache write ${fmt(s.write)}, output ${fmt(s.output)}` +
+    ` = ~${fmt(s.units)} input-token equivalents${s.failed ? ` (${s.failed} failed)` : ''}\n`;
+  let out = 'Keep-warm pings (measured: usage reported by each request)\n';
+  out += line('this project', sum(rows));
+  out += line('today', sum(rows.filter((x) => x.t >= midnight)));
+  if (session) out += line('this session', sum(rows.filter((x) => x.s === session)));
+  return out;
+}
+
 /** The session's transcript, plus its subagents' transcripts when they are kept apart. */
 function transcriptsOf(sessionId, home) {
   const base = path.join(home, '.claude', 'projects');
@@ -95,7 +121,7 @@ function usageOf(files) {
 function usageTable(u) {
   const inTotal = u.input + u.cacheRead + u.cacheWrite;
   const hit = inTotal ? Math.round((u.cacheRead / inTotal) * 100) : 0;
-  return 'Tokens in this session (from the transcript)\n' +
+  return 'Tokens in this session (measured: from the transcript)\n' +
     `  ${'model calls'.padEnd(34)} ${fmt(u.calls)}\n` +
     `  ${'cache read'.padEnd(34)} ${fmt(u.cacheRead)}  (${hit}% of the input)\n` +
     `  ${'cache write'.padEnd(34)} ${fmt(u.cacheWrite)}\n` +
@@ -119,11 +145,15 @@ function costLines(u) {
 
 function report(root, session, home = os.homedir()) {
   const all = readLines(path.join(root, '.trimtoken', 'stats.jsonl'));
-  let out = all && all.length ? table(all, `Project ${root}`) : 'No interventions recorded in this project yet.\n';
-  if (session && all) {
-    const mine = all.filter((r) => r.s === session);
-    out += `\n${mine.length ? table(mine, 'This session') : 'This session: no interventions yet.\n'}`;
+  const cut = (all || []).filter((r) => r.m !== 'warm'); // a scheduled ping is listed below with what it used
+  let out = cut.length ? table(cut, `Project ${root} (estimated)`) : 'No interventions recorded in this project yet.\n';
+  if (session && cut.length) {
+    const mine = cut.filter((r) => r.s === session);
+    out += `\n${mine.length ? table(mine, 'This session (estimated)') : 'This session: no interventions yet.\n'}`;
   }
+  if (cut.length) out += ESTIMATE_NOTE;
+  const warm = warmTable(root, session);
+  if (warm) out += `\n${warm}`;
   if (session) {
     const files = transcriptsOf(session, home);
     if (files.length) out += `\n${usageTable(usageOf(files))}`;
@@ -135,4 +165,4 @@ if (require.main === module) {
   process.stdout.write(report(process.argv[2] || process.cwd(), process.argv[3] || null));
 }
 
-module.exports = { report, usageOf, transcriptsOf, costUnits, readWeight };
+module.exports = { report, usageOf, transcriptsOf, costUnits, readWeight, warmTable };

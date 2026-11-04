@@ -14,7 +14,7 @@ test('billed cost weights output, cache writes and cache reads by model', () => 
 });
 
 test('the savings report shows the billed shares of a session', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tt-stats-'));
+  const home = require('./helpers.cjs').tmpRoot('tt-stats-');
   const dir = path.join(home, '.claude', 'projects', 'p');
   fs.mkdirSync(dir, { recursive: true });
   const line = (id, u) => JSON.stringify({ type: 'assistant', message: { id, model: 'claude-sonnet-5-5', usage: u } });

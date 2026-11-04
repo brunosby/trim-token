@@ -98,3 +98,25 @@ test('hook post Bash: output Claude Code already saved in full (persistedOutputP
   assert.ok(!r.out);
   assert.ok(!fs.existsSync(`${root}/.trimtoken/out`));
 });
+
+test('table rows are data: a header with aligned columns, or pipes, keeps every row; log runs are still grouped', () => {
+  const SHx = require('../lib/shell.cjs');
+  const rows = ['id  name     started  duration'];
+  for (let i = 1; i <= 8; i++) rows.push(`${i}   job      10:0${i}    ${i * 13}ms`);
+  assert.doesNotMatch(SHx.clean(rows.join('\n')), /more like/);
+  const md = ['| user | login | latency |', '|---|---|---|'];
+  for (let i = 1; i <= 6; i++) md.push(`| alice | 09:1${i} | ${i * 7} ms |`);
+  assert.doesNotMatch(SHx.clean(md.join('\n')), /more like/);
+  const log = [];
+  for (let i = 1; i <= 8; i++) log.push(`2026-11-04 10:0${i}:00 INFO  request ${i} served in ${i * 3}ms`);
+  assert.match(SHx.clean(log.join('\n')), /\[×6 more like: /);
+});
+
+test('when error lines do not fit, the footer says how many and how to list them all', () => {
+  const C = require('../lib/cap.cjs');
+  const lines = [];
+  for (let i = 0; i < 400; i++) lines.push(`src/mod${i}.js:${i} error: something failed in module number ${i}`);
+  const c = C.cut(lines.join('\n'), 3000);
+  assert.ok(c.dropped > 0);
+  assert.match(C.footer(99999, '/tmp/x.txt', true, c.dropped), new RegExp(`${c.dropped} more error lines are only there`));
+});

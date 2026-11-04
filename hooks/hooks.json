@@ -1,5 +1,5 @@
 {
-  "description": "trim-token: output cleanup and cap, searches kept out of dependency folders, re-reads as diffs, short contracts, cost warnings, keep-warm pings and zero-turn commands.",
+  "description": "trim-token: output cleanup and cap, searches kept out of dependency folders, re-reads as diffs, short contracts, cost warnings, opt-in keep-warm pings and zero-turn commands.",
   "hooks": {
     "SessionStart": [
       {

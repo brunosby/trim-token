@@ -14,7 +14,7 @@ function transcript(dir, { ttl = '5m', tokens = 50000, model = 'claude-sonnet-5-
   fs.writeFileSync(file, `${JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), message: { model, usage } })}\n`);
   return file;
 }
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tt-warm-'));
+const tmp = () => require('./helpers.cjs').tmpRoot('tt-warm-');
 const lastUsage = require('../lib/watch.cjs').lastUsage;
 
 test('keep-warm: scheduled only for the 5-minute cache', () => {

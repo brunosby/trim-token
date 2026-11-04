@@ -117,6 +117,9 @@ function capText(text, limit, cfg, root, kind, meta) {
 
 function postBash(resp, cfg, root, meta = {}) {
   if (!resp || typeof resp !== 'object' || typeof resp.stdout !== 'string') return null;
+  // Claude Code already saved the whole output and shows the model a short preview; the stdout here is cut at
+  // 30k characters, so a copy of it would be neither smaller for the model nor the full text.
+  if (resp.persistedOutputPath) return null;
   const SH = require('../lib/shell.cjs');
   const before = resp.stdout.length + (typeof resp.stderr === 'string' ? resp.stderr.length : 0);
   const out = { ...resp };

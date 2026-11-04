@@ -88,3 +88,13 @@ test('hook post Bash: when similar log lines are grouped, the original is saved 
   const r2 = runHook('post', { cwd: tmpRoot(), session_id: 's', tool_name: 'Bash', tool_input: { command: 'npm i' }, tool_response: { stdout: same, stderr: '' } });
   assert.doesNotMatch(r2.out.hookSpecificOutput.updatedToolOutput.stdout, /Full text/);
 });
+
+test('hook post Bash: output Claude Code already saved in full (persistedOutputPath) is left alone and not copied', () => {
+  const root = tmpRoot();
+  // Measured: a 247 KB find came to the hook cut at 30k characters, and Claude Code showed the model a 2 KB preview.
+  const stdout = Array.from({ length: 1500 }, (_, i) => `node_modules/pkg/file${i}.js with some text`).join('\n').slice(0, 30000);
+  const r = runHook('post', { cwd: root, session_id: 's', tool_name: 'Bash', tool_input: { command: 'find node_modules/pkg -type f' },
+    tool_response: { stdout, stderr: '', persistedOutputPath: `${root}/tool-results/b1.txt`, persistedOutputSize: 253542 } });
+  assert.ok(!r.out);
+  assert.ok(!fs.existsSync(`${root}/.trimtoken/out`));
+});

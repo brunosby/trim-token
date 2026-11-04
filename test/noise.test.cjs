@@ -235,3 +235,13 @@ test('in a git repository, the corrected grep -r and find also leave out .git; i
   fs.rmSync(path.join(root, 'node_modules'), { recursive: true });
   assert.strictEqual(bash(root, 'grep -rn foo .'), null);
 });
+
+test('the corrected grep -r also leaves out an env file next to the sources, so it is not refused a second time', () => {
+  const root = project({ ['.e' + 'nv']: 'K=1\n', ['.e' + 'nv.example']: 'K=\n' });
+  const hit = bash(root, 'grep -rl useState .');
+  assert.match(hit.fix, /grep --exclude-dir=node_modules --exclude=\.env -rl useState \./);
+  assert.doesNotMatch(hit.fix, /example/);
+  // Already named by the command: not added again; find is not a content search and gets nothing.
+  assert.doesNotMatch(bash(root, 'grep -rl --exclude=.env useState .').fix || '', /--exclude=\.env.*--exclude=\.env/);
+  assert.doesNotMatch(bash(root, 'find . -name "*.js"').fix, /\.env/);
+});
